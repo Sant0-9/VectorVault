@@ -14,12 +14,12 @@
 </p>
 
 <p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-benchmarks">Benchmarks</a> •
-  <a href="#-api">API</a> •
-  <a href="#-contributing">Contributing</a>
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#benchmarks">Benchmarks</a> •
+  <a href="#api-reference">API</a> •
+  <a href="#contributing">Contributing</a>
 </p>
 
 <img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="700">
@@ -30,7 +30,7 @@
 
 <div align="center">
 
-## 🎯 What is VectorVault?
+## What is VectorVault?
 
 </div>
 
@@ -41,10 +41,10 @@
 **VectorVault** is a production-grade **Approximate Nearest Neighbor (ANN)** search engine implementing the **HNSW algorithm** with **AVX2 SIMD** optimizations. Built from scratch in **modern C++20**, it provides a lightweight, blazing-fast alternative to FAISS with a dead-simple REST API.
 
 **Perfect for:**
-- 🔍 Semantic search over embeddings
-- 🎯 Recommendation systems  
-- 🖼️ Image similarity search
-- ⚡ Real-time vector retrieval at scale
+- Semantic search over embeddings
+- Recommendation systems  
+- Image similarity search
+- Real-time vector retrieval at scale
 
 </td>
 <td width="40%">
@@ -62,7 +62,7 @@ auto results = index.search(
     k=10, 
     ef_search=50
 );
-// < 1ms latency ⚡
+// Sub-millisecond latency
 ```
 
 </td>
@@ -79,12 +79,12 @@ auto results = index.search(
 
 <div align="center">
 
-## ✨ Features
+## Features
 
 </div>
 
 <details open>
-<summary><b>🚀 Core Algorithm</b></summary>
+<summary><b>Core Algorithm</b></summary>
 <br>
 
 | Feature | Description |
@@ -97,7 +97,7 @@ auto results = index.search(
 </details>
 
 <details open>
-<summary><b>🎨 Production Features</b></summary>
+<summary><b>Production Features</b></summary>
 <br>
 
 ```mermaid
@@ -113,11 +113,11 @@ graph LR
     style E fill:#a8dadc
 ```
 
-- 🌐 **REST API** - JSON interface on port 8080
-- 🐳 **Docker Ready** - Multi-stage optimized builds
-- 🔄 **Auto-Scaling** - Thread pool for parallel queries
-- 💾 **Persistent** - CRC32 validated snapshots
-- 🎯 **Cross-Platform** - Linux & Windows support
+- **REST API** - JSON interface on port 8080
+- **Docker Ready** - Multi-stage optimized builds
+- **Auto-Scaling** - Thread pool for parallel queries
+- **Persistent** - CRC32 validated snapshots
+- **Cross-Platform** - Linux and Windows support
 
 </details>
 
@@ -125,7 +125,7 @@ graph LR
 
 <div align="center">
 
-## 🚀 Quick Start
+## Quick Start
 
 </div>
 
@@ -135,7 +135,7 @@ graph LR
 <tr>
 <td width="50%">
 
-#### 📦 Build from Source
+#### Build from Source
 
 ```bash
 # Clone the repo
@@ -153,7 +153,7 @@ cmake --build build -j$(nproc)
 </td>
 <td width="50%">
 
-#### 🐳 Docker (Recommended)
+#### Docker (Recommended)
 
 ```bash
 # Build image
@@ -176,7 +176,7 @@ docker run -p 8080:8080 \
 
 <div align="center">
 
-## 💻 Usage Examples
+## Usage Examples
 
 </div>
 
@@ -231,7 +231,7 @@ curl -X POST 'http://localhost:8080/query?k=10&ef=50' \
 </tr>
 </table>
 
-### 🐍 Python Client
+### Python Client
 
 ```python
 import requests
@@ -259,17 +259,17 @@ for i in range(1_000_000):
     embedding = np.random.randn(768).tolist()
     client.add(i, embedding)
 
-# Search (sub-millisecond!)
+# Search (sub-millisecond)
 query = np.random.randn(768).tolist()
 results = client.search(query, k=10, ef=50)
-print(f"⚡ Found in {results['latency_ms']:.2f}ms")
+print(f"Found in {results['latency_ms']:.2f}ms")
 ```
 
 ---
 
 <div align="center">
 
-## 🏗️ Architecture
+## Architecture
 
 </div>
 
@@ -300,7 +300,7 @@ graph TB
 <div align="center">
 <img src="https://raw.githubusercontent.com/nmslib/hnswlib/master/pictures/hnsw.png" width="600"/>
 
-**Hierarchical layers:** Sparse top for long jumps → Dense bottom for precision
+**Hierarchical layers:** Sparse top for long jumps, dense bottom for precision
 
 </div>
 
@@ -309,22 +309,19 @@ graph TB
 <td width="33%">
 
 **Layer 3** (Sparse)  
-🔵 ← → 🔵 ← → 🔵  
-Long-range connections
+Long-range connections for fast navigation
 
 </td>
 <td width="33%">
 
 **Layer 1** (Medium)  
-🔵🔵 ← → 🔵🔵  
-Mid-range hops
+Mid-range hops between clusters
 
 </td>
 <td width="33%">
 
 **Layer 0** (Dense)  
-🔵🔵🔵🔵🔵🔵  
-Precise local search
+Precise local neighborhood search
 
 </td>
 </tr>
@@ -334,12 +331,12 @@ Precise local search
 
 <div align="center">
 
-## 📊 Benchmarks
+## Benchmarks
 
 </div>
 
 <details open>
-<summary><b>⚡ Query Performance</b> (Click to expand)</summary>
+<summary><b>Query Performance</b> (Click to expand)</summary>
 
 **Test Setup:** AMD Ryzen 9 5950X (16 cores) | 100k vectors | 768 dimensions
 
@@ -360,7 +357,7 @@ Precise local search
 <td>0.68ms</td>
 <td><b>4,761</b></td>
 <td>87%</td>
-<td>🟡 Fast</td>
+<td>Fast</td>
 </tr>
 <tr>
 <td><code>50</code></td>
@@ -369,7 +366,7 @@ Precise local search
 <td>1.58ms</td>
 <td><b>1,852</b></td>
 <td>97%</td>
-<td>🟢 Balanced</td>
+<td>Balanced</td>
 </tr>
 <tr>
 <td><code>100</code></td>
@@ -378,7 +375,7 @@ Precise local search
 <td>2.34ms</td>
 <td><b>1,124</b></td>
 <td>99%</td>
-<td>🔵 Accurate</td>
+<td>Accurate</td>
 </tr>
 <tr>
 <td><code>200</code></td>
@@ -387,14 +384,14 @@ Precise local search
 <td>3.67ms</td>
 <td><b>690</b></td>
 <td>99.7%</td>
-<td>🟣 Precise</td>
+<td>Precise</td>
 </tr>
 </table>
 
 </details>
 
 <details>
-<summary><b>🏗️ Build Performance</b></summary>
+<summary><b>Build Performance</b></summary>
 
 <table>
 <tr>
@@ -441,7 +438,7 @@ open bench/out/*.png                # View results
 
 <div align="center">
 
-## ⚙️ Configuration
+## Configuration
 
 </div>
 
@@ -453,19 +450,19 @@ open bench/out/*.png                # View results
 
 | Parameter | Default | Impact |
 |-----------|---------|--------|
-| **M** | `16` | Connections per node<br>↑ = Better recall, more memory |
-| **ef_construction** | `200` | Build quality<br>↑ = Better index, slower build |
-| **ef_search** | `50` | Query quality<br>↑ = Better recall, slower search |
+| **M** | `16` | Connections per node<br>Higher = Better recall, more memory |
+| **ef_construction** | `200` | Build quality<br>Higher = Better index, slower build |
+| **ef_search** | `50` | Query quality<br>Higher = Better recall, slower search |
 
 **Presets:**
 ```cpp
-// 🟢 Balanced (default)
+// Balanced (default)
 M=16, efC=200, efSearch=50
 
-// ⚡ Speed-optimized
+// Speed-optimized
 M=8, efC=100, efSearch=20
 
-// 🎯 Accuracy-optimized
+// Accuracy-optimized
 M=32, efC=400, efSearch=200
 ```
 
@@ -509,7 +506,7 @@ services:
 
 <div align="center">
 
-## 📡 API Reference
+## API Reference
 
 </div>
 
@@ -628,7 +625,7 @@ services:
 
 <div align="center">
 
-## 🛠️ Development
+## Development
 
 </div>
 
@@ -692,7 +689,7 @@ gcovr -r .. --html --html-details -o coverage.html
 
 <div align="center">
 
-## 📈 Performance Comparison
+## Performance Comparison
 
 </div>
 
@@ -700,18 +697,18 @@ gcovr -r .. --html --html-details -o coverage.html
 |---|-------------|-------|---------|--------|----------|
 | **Algorithm** | HNSW | Multi | HNSW | Multi | HNSW |
 | **Language** | C++20 | C++ | C++11 | Go/C++ | Go |
-| **REST API** | ✅ Native | ❌ | ❌ | ✅ | ✅ |
-| **SIMD** | ✅ AVX2 | ✅ | ✅ | ✅ | ❌ |
-| **Docker** | ✅ | ❌ | ❌ | ✅ | ✅ |
-| **Memory Map** | ✅ | ✅ | ❌ | ✅ | ❌ |
-| **Size** | 🟢 Tiny | 🔴 Large | 🟢 Tiny | 🟡 Medium | 🟡 Medium |
-| **Setup Time** | 🟢 30s | 🟡 5min | 🟢 1min | 🔴 15min | 🔴 10min |
+| **REST API** | Native | None | None | Yes | Yes |
+| **SIMD** | AVX2 | Yes | Yes | Yes | None |
+| **Docker** | Yes | None | None | Yes | Yes |
+| **Memory Map** | Yes | Yes | None | Yes | None |
+| **Size** | Tiny | Large | Tiny | Medium | Medium |
+| **Setup Time** | 30s | 5min | 1min | 15min | 10min |
 
 ---
 
 <div align="center">
 
-## 🤝 Contributing
+## Contributing
 
 </div>
 
@@ -719,26 +716,26 @@ gcovr -r .. --html --html-details -o coverage.html
 <tr>
 <td width="33%" align="center">
 
-### 🐛 Report Bug
+### Report Bug
 [Open Issue](https://github.com/Sant0-9/VectorVault/issues)
 
-Found a bug? Let us know!
+Found a bug? Let us know.
 
 </td>
 <td width="33%" align="center">
 
-### 💡 Request Feature
+### Request Feature
 [Open Discussion](https://github.com/Sant0-9/VectorVault/discussions)
 
-Have an idea? Share it!
+Have an idea? Share it.
 
 </td>
 <td width="33%" align="center">
 
-### 🔧 Submit PR
+### Submit PR
 [Pull Request](https://github.com/Sant0-9/VectorVault/pulls)
 
-Code ready? Send it!
+Code ready? Send it.
 
 </td>
 </tr>
@@ -765,7 +762,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 <div align="center">
 
-## 📄 License
+## License
 
 </div>
 
@@ -791,7 +788,7 @@ Full license: [LICENSE](LICENSE)
 
 <div align="center">
 
-## 🌟 Acknowledgments
+## Acknowledgments
 
 </div>
 
@@ -831,7 +828,7 @@ Concepts, Ranges, Modules
 
 <div align="center">
 
-## 👤 Author
+## Author
 
 <img src="https://github.com/Sant0-9.png" width="100" style="border-radius: 50%"/>
 
@@ -847,8 +844,8 @@ Concepts, Ranges, Modules
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=100&section=footer" width="100%"/>
 
-**⚡ Built for Speed • 🎯 Designed for Scale • 🚀 Ready for Production**
+**Built for Speed • Designed for Scale • Ready for Production**
 
-<sub>If you find this project useful, please give it a ⭐</sub>
+<sub>If you find this project useful, please give it a star</sub>
 
 </div>
