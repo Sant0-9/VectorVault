@@ -80,47 +80,77 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
     }
     
     // Create new node
-    auto node = std::make_unique<Node>();
-    node->id = id;
-    node->level = random_level();
-    node->vector.assign(vec.begin(), vec.end());
-    node->neighbors.resize(node->level + 1);
-    
-    size_t node_idx = nodes_.size();
-    id_to_index_[id] = node_idx;
+    int node_level = random_level();
+    std::vector<float> node_vec(vec.begin(), vec.end());
     
     // If this is the first node
     if (entry_point_ == -1) {
-        entry_point_ = static_cast<int>(node_idx);
-        max_level_ = node->level;
+        auto node = std::make_unique<Node>();
+        node->id = id;
+        node->level = node_level;
+        node->vector = node_vec;
+        node->neighbors.resize(node_level + 1);
+        
+        entry_point_ = id;
+        max_level_ = node_level;
         nodes_.push_back(std::move(node));
+        id_to_index_[id] = 0;
         return;
     }
+    
+    // Build neighbor lists for new node
+    std::vector<std::vector<int>> new_node_neighbors(node_level + 1);
     
     // Search for nearest neighbors at each layer
     std::vector<int> entry_points = {entry_point_};
     
     // Greedy search from top to target layer
-    for (int lc = max_level_; lc > node->level; --lc) {
-        auto results = search_layer(vec, entry_points[0], 1, lc);
+    for (int lc = max_level_; lc > node_level; --lc) {
+        auto results = search_layer(node_vec, entry_points[0], 1, lc);
         if (!results.empty()) {
             entry_points[0] = results[0].id;
         }
     }
     
     // Insert at all layers from top to 0
-    for (int lc = node->level; lc >= 0; --lc) {
+    for (int lc = node_level; lc >= 0; --lc) {
         int ef = std::max(params_.ef_construction, params_.M);
-        auto candidates = search_layer(vec, entry_points[0], ef, lc);
+        auto candidates = search_layer(node_vec, entry_points[0], ef, lc);
         
         // Select M neighbors
         int M = (lc == 0) ? params_.max_M0 : params_.max_M;
-        auto neighbors = select_neighbors_heuristic(vec, candidates, M);
+        auto neighbors = select_neighbors_heuristic(node_vec, candidates, M);
         
-        // Add bidirectional links
-        for (int neighbor_id : neighbors) {
-            size_t neighbor_idx = id_to_index_[neighbor_id];
-            nodes_[node_idx]->neighbors[lc].push_back(neighbor_id);
+        new_node_neighbors[lc] = neighbors;
+        
+        // Update entry point for next layer
+        if (!candidates.empty()) {
+            entry_points[0] = candidates[0].id;
+        }
+    }
+    
+    // Now create and add the node
+    auto node = std::make_unique<Node>();
+    node->id = id;
+    node->level = node_level;
+    node->vector = node_vec;
+    node->neighbors = new_node_neighbors;
+    
+    size_t node_idx = nodes_.size();
+    nodes_.push_back(std::move(node));
+    id_to_index_[id] = node_idx;
+    
+    // Add bidirectional links
+    for (int lc = node_level; lc >= 0; --lc) {
+        for (int neighbor_id : new_node_neighbors[lc]) {
+            auto neighbor_it = id_to_index_.find(neighbor_id);
+            if (neighbor_it == id_to_index_.end()) continue;
+            
+            size_t neighbor_idx = neighbor_it->second;
+            
+            // Check if neighbor has this layer
+            if (lc >= static_cast<int>(nodes_[neighbor_idx]->neighbors.size())) continue;
+            
             nodes_[neighbor_idx]->neighbors[lc].push_back(id);
             
             // Prune if necessary
@@ -129,30 +159,23 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
                 auto& neighbor_vec = nodes_[neighbor_idx]->vector;
                 std::vector<SearchResult> neighbor_candidates;
                 for (int conn_id : nodes_[neighbor_idx]->neighbors[lc]) {
-                    if (conn_id == id) continue;
-                    size_t conn_idx = id_to_index_[conn_id];
+                    auto conn_it = id_to_index_.find(conn_id);
+                    if (conn_it == id_to_index_.end()) continue;
+                    size_t conn_idx = conn_it->second;
                     float dist = distance(neighbor_vec, nodes_[conn_idx]->vector);
                     neighbor_candidates.push_back({conn_id, dist});
                 }
-                neighbor_candidates.push_back({id, distance(neighbor_vec, vec)});
                 
                 auto pruned = select_neighbors_heuristic(neighbor_vec, neighbor_candidates, max_conn);
                 nodes_[neighbor_idx]->neighbors[lc] = pruned;
             }
         }
-        
-        // Update entry point for next layer
-        if (!candidates.empty()) {
-            entry_points[0] = candidates[0].id;
-        }
     }
     
-    nodes_.push_back(std::move(node));
-    
     // Update entry point if necessary
-    if (nodes_[node_idx]->level > max_level_) {
-        max_level_ = nodes_[node_idx]->level;
-        entry_point_ = static_cast<int>(node_idx);
+    if (node_level > max_level_) {
+        max_level_ = node_level;
+        entry_point_ = id;
     }
 }
 
