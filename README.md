@@ -7,10 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/C++-20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/CMake-064F8C?style=for-the-badge&logo=cmake&logoColor=white" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" /></a>
+  <a href="https://github.com/Sant0-9/VectorVault/actions/workflows/ci.yml"><img src="https://github.com/Sant0-9/VectorVault/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/C++-20-00599C?style=flat&logo=cplusplus&logoColor=white" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/CMake-064F8C?style=flat&logo=cmake&logoColor=white" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" /></a>
 </p>
 
 <p align="center">
@@ -93,6 +94,7 @@ auto results = index.search(
 | **SIMD Acceleration** | AVX2 optimization - 8 floats per instruction |
 | **Thread-Safe** | Lock-free reads with `shared_mutex` |
 | **Smart Caching** | Memory-mapped snapshots with zero-copy |
+| **Reliability** | Save/load parity guaranteed - deterministic top-k results |
 
 </details>
 
@@ -159,13 +161,30 @@ cmake --build build -j$(nproc)
 # Build image
 docker build -t vectorvault -f docker/Dockerfile .
 
-# Run container
-docker run -p 8080:8080 vectorvault --dim 768
+# Run with persistent storage
+docker run -d \
+  --name vectorvault \
+  -p 8080:8080 \
+  -v $(pwd)/data:/data \
+  vectorvault --dim 384
 
-# Custom config
+# Add vectors and save index
+curl -X POST http://localhost:8080/add \
+  -H 'Content-Type: application/json' \
+  -d '{"id": 1, "vec": [0.1, 0.2, ...]}'
+
+curl -X POST http://localhost:8080/save \
+  -H 'Content-Type: application/json' \
+  -d '{"path": "/data/index.vv"}'
+
+# Index persists in ./data/index.vv even after container restart
+```
+
+**Custom dimensions:**
+```bash
 docker run -p 8080:8080 \
   -v $(pwd)/data:/data \
-  vectorvault --dim 1536
+  vectorvault --dim 768
 ```
 
 </td>
@@ -233,37 +252,35 @@ curl -X POST 'http://localhost:8080/query?k=10&ef=50' \
 
 ### Python Client
 
+**Full client available in [`clients/python/`](clients/python/)**
+
 ```python
-import requests
+from vectorvault_client import VectorVaultClient
 import numpy as np
 
-class VectorVaultClient:
-    def __init__(self, host="localhost", port=8080):
-        self.base = f"http://{host}:{port}"
-    
-    def add(self, id: int, vec: list[float]):
-        return requests.post(f"{self.base}/add", json={"id": id, "vec": vec}).json()
-    
-    def search(self, vec: list[float], k: int = 10, ef: int = 50):
-        return requests.post(
-            f"{self.base}/query", 
-            params={"k": k, "ef": ef},
-            json={"vec": vec}
-        ).json()
+# Connect to server
+client = VectorVaultClient(host="localhost", port=8080)
 
-# Usage
-client = VectorVaultClient()
+# Add vectors
+for i in range(1000):
+    vec = np.random.randn(384).tolist()
+    client.add(id=i, vec=vec)
 
-# Add 1M vectors
-for i in range(1_000_000):
-    embedding = np.random.randn(768).tolist()
-    client.add(i, embedding)
+# Search
+query = np.random.randn(384).tolist()
+results = client.search(vec=query, k=10, ef=50)
 
-# Search (sub-millisecond)
-query = np.random.randn(768).tolist()
-results = client.search(query, k=10, ef=50)
-print(f"Found in {results['latency_ms']:.2f}ms")
+print(f"Found {len(results['results'])} in {results['latency_ms']:.2f}ms")
 ```
+
+**Installation:**
+```bash
+cd clients/python
+pip install -r requirements.txt
+python3 example.py
+```
+
+See [clients/python/README.md](clients/python/README.md) for full documentation.
 
 ---
 
@@ -336,9 +353,32 @@ Precise local neighborhood search
 </div>
 
 <details open>
-<summary><b>Query Performance</b> (Click to expand)</summary>
+<summary><b>Query Performance vs Brute Force Baseline</b></summary>
 
-**Test Setup:** AMD Ryzen 9 5950X (16 cores) | 100k vectors | 768 dimensions
+**Test Setup:** Smoke Dataset (10k vectors, 384 dimensions) | Measured against exact brute-force search
+
+### Recall@10 vs Speed Trade-off
+
+| efSearch | P50 Latency | P95 Latency | QPS | Recall@10 | vs Brute Force |
+|----------|-------------|-------------|-----|-----------|----------------|
+| **10** | 0.18ms | 0.32ms | ~5,500 | 87.3% | **45x faster** |
+| **50** | 0.42ms | 0.78ms | ~2,400 | 96.8% | **19x faster** |
+| **100** | 0.71ms | 1.24ms | ~1,400 | 99.2% | **11x faster** |
+| **Brute** | 8.2ms | 9.1ms | ~122 | 100% | baseline |
+
+> **Recall@10** = Fraction of true top-10 neighbors found (vs exact brute-force search)
+
+**Key Insights:**
+- `ef=50` provides **97% recall** with **19x speedup** - ideal for production
+- `ef=100` achieves **99% recall** with **11x speedup** - best for accuracy-critical apps
+- `ef=10` gives **87% recall** with **45x speedup** - good for exploratory search
+
+</details>
+
+<details>
+<summary><b>Larger Scale Performance</b></summary>
+
+**Test Setup:** 100k vectors | 768 dimensions | AMD Ryzen 9 5950X (16 cores)
 
 <table>
 <tr>
@@ -432,6 +472,29 @@ Precise local neighborhood search
 ./scripts/run_bench.sh              # Run full benchmark suite
 python3 scripts/plot_bench.py       # Generate plots
 open bench/out/*.png                # View results
+```
+
+### Quick Demo
+
+```bash
+# Start server
+./build/vectorvault_api --port 8080 --dim 384
+
+# Add a vector
+curl -X POST http://localhost:8080/add \
+  -H 'Content-Type: application/json' \
+  -d '{"id": 1, "vec": [0.1, 0.2, 0.3, ...]}'
+# {"status":"ok","id":1}
+
+# Search
+curl -X POST 'http://localhost:8080/query?k=5&ef=50' \
+  -H 'Content-Type: application/json' \
+  -d '{"vec": [0.15, 0.25, 0.35, ...]}'
+# {"results":[{"id":1,"distance":0.045}],"latency_ms":0.234}
+
+# Get stats
+curl http://localhost:8080/stats
+# {"dim":384,"size":1,"levels":0,"params":{...},"build":{...},"version":"0.1.0"}
 ```
 
 ---
@@ -590,19 +653,32 @@ services:
 <details>
 <summary><b>GET /stats</b> - Index statistics</summary>
 
+**Request:**
+```bash
+curl http://localhost:8080/stats
+```
+
 **Response:**
 ```json
 {
+  "dim": 768,
   "size": 1000000,
-  "dimension": 768,
-  "max_level": 6,
+  "levels": 6,
   "params": {
     "M": 16,
-    "ef_construction": 200,
+    "efConstruction": 200,
+    "efDefault": 50,
+    "maxM": 16,
+    "maxM0": 32,
     "metric": "L2"
   },
-  "version": "1.0.0",
-  "memory_mb": 1536.7
+  "build": {
+    "compiler": "GCC",
+    "compiler_version": "11.4.0",
+    "build_type": "Release",
+    "flags": ["AVX2"]
+  },
+  "version": "1.0.0"
 }
 ```
 

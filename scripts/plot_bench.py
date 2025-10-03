@@ -13,8 +13,9 @@ try:
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.use('Agg')  # Non-interactive backend
+    import numpy as np
 except ImportError:
-    print("Error: matplotlib is required. Install with: pip install matplotlib")
+    print("Error: matplotlib and numpy required. Install with: pip install matplotlib numpy")
     sys.exit(1)
 
 
@@ -30,30 +31,37 @@ def load_results(csv_path):
 
 def plot_ef_vs_recall(results, output_dir):
     """Plot efSearch vs Recall@k"""
-    grouped = defaultdict(list)
+    data = []
     
     for row in results:
-        if row['mode'] == 'query' and row.get('ef_search'):
-            key = (row['N'], row['d'])
-            grouped[key].append({
+        if row.get('ef_search') and row.get('recall_at_10'):
+            data.append({
                 'ef': int(row['ef_search']),
                 'recall': float(row['recall_at_10'])
             })
     
+    if not data:
+        print("No recall data found, skipping recall plot")
+        return
+    
+    data.sort(key=lambda x: x['ef'])
+    
     plt.figure(figsize=(10, 6))
+    ef_values = [x['ef'] for x in data]
+    recall_values = [x['recall'] for x in data]
     
-    for (N, d), data in grouped.items():
-        data.sort(key=lambda x: x['ef'])
-        ef_values = [x['ef'] for x in data]
-        recall_values = [x['recall'] for x in data]
-        plt.plot(ef_values, recall_values, marker='o', label=f'N={N}, d={d}')
+    plt.plot(ef_values, recall_values, marker='o', linewidth=2, markersize=8, color='#00d9ff')
+    plt.fill_between(ef_values, recall_values, alpha=0.3, color='#00d9ff')
     
-    plt.xlabel('efSearch')
-    plt.ylabel('Recall@10')
-    plt.title('HNSW: efSearch vs Recall@10')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
+    plt.xlabel('efSearch', fontsize=12)
+    plt.ylabel('Recall@10', fontsize=12)
+    plt.title('HNSW: efSearch vs Recall@10 (Smoke Dataset: 10k vectors, d=384)', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3, linestyle='--')
     plt.ylim(0, 1.05)
+    
+    # Add value labels
+    for ef, recall in zip(ef_values, recall_values):
+        plt.text(ef, recall + 0.02, f'{recall:.2%}', ha='center', fontsize=9)
     
     output_path = output_dir / 'ef_vs_recall.png'
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -168,6 +176,45 @@ def plot_build_time(results, output_dir):
     plt.close()
 
 
+def generate_summary_table(results, output_dir):
+    """Generate a markdown table of results"""
+    data = []
+    
+    for row in results:
+        if row.get('ef_search'):
+            data.append({
+                'ef': int(row['ef_search']),
+                'p50': float(row['p50_ms']),
+                'p95': float(row['p95_ms']),
+                'qps': int(float(row['qps'])),
+                'recall': float(row.get('recall_at_10', 0))
+            })
+    
+    if not data:
+        return
+    
+    data.sort(key=lambda x: x['ef'])
+    
+    table_path = output_dir / 'summary_table.md'
+    with open(table_path, 'w') as f:
+        f.write("| efSearch | P50 Latency | P95 Latency | QPS | Recall@10 |\n")
+        f.write("|----------|-------------|-------------|-----|----------|\n")
+        for row in data:
+            f.write(f"| {row['ef']} | {row['p50']:.2f}ms | {row['p95']:.2f}ms | "
+                   f"{row['qps']:,} | {row['recall']:.1%} |\n")
+    
+    print(f"Saved: {table_path}")
+    
+    # Also print to console
+    print("\n" + "="*70)
+    print("BENCHMARK SUMMARY (Smoke Dataset: 10k vectors, d=384)")
+    print("="*70)
+    for row in data:
+        print(f"ef={row['ef']:3d}  |  P50: {row['p50']:5.2f}ms  |  P95: {row['p95']:5.2f}ms  |  "
+              f"QPS: {row['qps']:5,}  |  Recall@10: {row['recall']:5.1%}")
+    print("="*70 + "\n")
+
+
 def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
@@ -184,15 +231,16 @@ def main():
     results = load_results(csv_path)
     print(f"Loaded {len(results)} result rows")
     
-    print("\nGenerating plots...")
+    print("\nGenerating plots and tables...")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     plot_ef_vs_recall(results, output_dir)
     plot_ef_vs_qps(results, output_dir)
     plot_latency_percentiles(results, output_dir)
     plot_build_time(results, output_dir)
+    generate_summary_table(results, output_dir)
     
-    print("\nDone! Plots saved to:", output_dir)
+    print("\nDone! All outputs saved to:", output_dir)
 
 
 if __name__ == '__main__':

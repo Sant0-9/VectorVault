@@ -68,6 +68,7 @@ TEST_F(PersistenceTest, IdenticalSearchResults) {
     HNSWParams params;
     params.M = 16;
     params.ef_construction = 200;
+    params.seed = 12345;  // Fixed seed for determinism
 
     // Build original index
     HNSWIndex index1(dim, params);
@@ -100,6 +101,75 @@ TEST_F(PersistenceTest, IdenticalSearchResults) {
             EXPECT_EQ(results1[i].id, results2[i].id) << "Query " << q << ", result " << i;
             EXPECT_NEAR(results1[i].distance, results2[i].distance, 1e-5f)
                 << "Query " << q << ", result " << i;
+        }
+    }
+}
+
+TEST_F(PersistenceTest, DeterministicTopKResults) {
+    // This test ensures that save/load maintains exact query result ordering
+    HNSWParams params;
+    params.M = 16;
+    params.ef_construction = 200;
+    params.seed = 42;
+
+    // Build index with fixed data
+    HNSWIndex index(dim, params);
+    for (int i = 0; i < N; ++i) {
+        index.add(i, vectors[i]);
+    }
+
+    // Create fixed query set
+    std::mt19937 query_rng(9999);
+    std::normal_distribution<float> query_dist(0.0f, 1.0f);
+    
+    std::vector<std::vector<float>> queries(5);
+    for (auto& q : queries) {
+        q.resize(dim);
+        for (int j = 0; j < dim; ++j) {
+            q[j] = query_dist(query_rng);
+        }
+    }
+
+    // Get results before save
+    std::vector<std::vector<std::pair<int, float>>> results_before;
+    for (const auto& q : queries) {
+        auto res = index.search(q, 10, 100);
+        std::vector<std::pair<int, float>> query_results;
+        for (const auto& r : res) {
+            query_results.emplace_back(r.id, r.distance);
+        }
+        results_before.push_back(query_results);
+    }
+
+    // Save and load
+    ASSERT_TRUE(index.save(test_index_path));
+    
+    HNSWIndex loaded_index(dim, params);
+    ASSERT_TRUE(loaded_index.load(test_index_path));
+
+    // Get results after load
+    std::vector<std::vector<std::pair<int, float>>> results_after;
+    for (const auto& q : queries) {
+        auto res = loaded_index.search(q, 10, 100);
+        std::vector<std::pair<int, float>> query_results;
+        for (const auto& r : res) {
+            query_results.emplace_back(r.id, r.distance);
+        }
+        results_after.push_back(query_results);
+    }
+
+    // Verify identical results
+    ASSERT_EQ(results_before.size(), results_after.size());
+    
+    for (size_t q = 0; q < queries.size(); ++q) {
+        ASSERT_EQ(results_before[q].size(), results_after[q].size()) 
+            << "Query " << q << " returned different number of results";
+        
+        for (size_t i = 0; i < results_before[q].size(); ++i) {
+            EXPECT_EQ(results_before[q][i].first, results_after[q][i].first)
+                << "Query " << q << ", position " << i << ": ID mismatch";
+            EXPECT_FLOAT_EQ(results_before[q][i].second, results_after[q][i].second)
+                << "Query " << q << ", position " << i << ": Distance mismatch";
         }
     }
 }

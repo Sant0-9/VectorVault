@@ -1,5 +1,6 @@
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
@@ -217,18 +218,67 @@ void VectorVaultServer::handle_stats(const httplib::Request&, httplib::Response&
     try {
         const auto& params = index_.params();
 
-        json response = {{"size", index_.size()},
-                         {"dimension", index_.dimension()},
-                         {"max_level", index_.max_level()},
-                         {"params",
-                          {{"M", params.M},
-                           {"ef_construction", params.ef_construction},
-                           {"max_M", params.max_M},
-                           {"max_M0", params.max_M0},
-                           {"metric", params.metric == DistanceMetric::L2 ? "L2" : "COSINE"}}},
-                         {"version", std::string(VERSION)}};
+        // Determine compiler and version
+        std::string compiler;
+        std::string compiler_version;
+        
+#if defined(__clang__)
+        compiler = "Clang";
+        compiler_version = std::to_string(__clang_major__) + "." + 
+                          std::to_string(__clang_minor__) + "." + 
+                          std::to_string(__clang_patchlevel__);
+#elif defined(__GNUC__)
+        compiler = "GCC";
+        compiler_version = std::to_string(__GNUC__) + "." + 
+                          std::to_string(__GNUC_MINOR__) + "." + 
+                          std::to_string(__GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER)
+        compiler = "MSVC";
+        compiler_version = std::to_string(_MSC_VER);
+#else
+        compiler = "Unknown";
+        compiler_version = "Unknown";
+#endif
 
-        res.set_content(response.dump(), "application/json");
+        // Build flags
+        std::string build_type;
+        std::vector<std::string> flags;
+        
+#ifdef NDEBUG
+        build_type = "Release";
+#else
+        build_type = "Debug";
+#endif
+
+#ifdef VECTORVAULT_ENABLE_AVX2
+        flags.push_back("AVX2");
+#endif
+
+#ifdef __AVX2__
+        if (std::find(flags.begin(), flags.end(), "AVX2") == flags.end()) {
+            flags.push_back("AVX2");
+        }
+#endif
+
+        json response = {
+            {"dim", index_.dimension()},
+            {"size", index_.size()},
+            {"levels", index_.max_level()},
+            {"params",
+             {{"M", params.M},
+              {"efConstruction", params.ef_construction},
+              {"efDefault", 50},
+              {"maxM", params.max_M},
+              {"maxM0", params.max_M0},
+              {"metric", params.metric == DistanceMetric::L2 ? "L2" : "COSINE"}}},
+            {"build",
+             {{"compiler", compiler},
+              {"compiler_version", compiler_version},
+              {"build_type", build_type},
+              {"flags", flags}}},
+            {"version", std::string(VERSION)}};
+
+        res.set_content(response.dump(2), "application/json");
 
     } catch (const std::exception& e) {
         res.status = 500;
