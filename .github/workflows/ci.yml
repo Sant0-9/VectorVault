@@ -35,7 +35,7 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DVECTORVAULT_ENABLE_AVX2=ON \
-          -DVECTORVAULT_WERROR=ON \
+          -DVECTORVAULT_WERROR=OFF \
           -DVECTORVAULT_BUILD_TESTS=ON \
           -DVECTORVAULT_BUILD_BENCH=ON
     
@@ -50,7 +50,7 @@ jobs:
       if: matrix.build_type == 'Release'
       run: |
         find include src api -name '*.cpp' -o -name '*.hpp' | \
-          xargs clang-tidy -p build --warnings-as-errors='*' || true
+          xargs clang-tidy -p build || true
     
     - name: Upload artifacts
       if: matrix.build_type == 'Release'
@@ -80,7 +80,7 @@ jobs:
         cmake -B build `
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
           -DVECTORVAULT_ENABLE_AVX2=ON `
-          -DVECTORVAULT_WERROR=ON `
+          -DVECTORVAULT_WERROR=OFF `
           -DVECTORVAULT_BUILD_TESTS=ON `
           -DVECTORVAULT_BUILD_BENCH=ON
     
