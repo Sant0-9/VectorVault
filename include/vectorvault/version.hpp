@@ -14,6 +14,6 @@ constexpr uint32_t VERSION_PATCH = 0;
 constexpr uint32_t FILE_FORMAT_VERSION = 1;
 
 // Magic number for file validation
-constexpr uint32_t FILE_MAGIC = 0x56564C54; // "VVLT" = VectorVauLT
+constexpr uint32_t FILE_MAGIC = 0x56564C54;  // "VVLT" = VectorVauLT
 
-} // namespace vectorvault
+}  // namespace vectorvault

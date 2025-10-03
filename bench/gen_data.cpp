@@ -1,19 +1,15 @@
-#include <vector>
-#include <random>
-#include <fstream>
 #include <cstring>
+#include <fstream>
+#include <random>
+#include <vector>
 
 namespace vectorvault::bench {
 
-void generate_random_vectors(
-    std::vector<std::vector<float>>& vectors,
-    int n,
-    int dim,
-    uint64_t seed = 42
-) {
+void generate_random_vectors(std::vector<std::vector<float>>& vectors, int n, int dim,
+                             uint64_t seed = 42) {
     std::mt19937 rng(seed);
     std::normal_distribution<float> dist(0.0f, 1.0f);
-    
+
     vectors.resize(n);
     for (int i = 0; i < n; ++i) {
         vectors[i].resize(dim);
@@ -38,46 +34,43 @@ void normalize_vectors(std::vector<std::vector<float>>& vectors) {
     }
 }
 
-bool save_vectors_binary(
-    const std::string& path,
-    const std::vector<std::vector<float>>& vectors
-) {
-    if (vectors.empty()) return false;
-    
+bool save_vectors_binary(const std::string& path, const std::vector<std::vector<float>>& vectors) {
+    if (vectors.empty())
+        return false;
+
     std::ofstream file(path, std::ios::binary);
-    if (!file) return false;
-    
+    if (!file)
+        return false;
+
     int n = static_cast<int>(vectors.size());
     int dim = static_cast<int>(vectors[0].size());
-    
+
     file.write(reinterpret_cast<const char*>(&n), sizeof(n));
     file.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
-    
+
     for (const auto& vec : vectors) {
         file.write(reinterpret_cast<const char*>(vec.data()), dim * sizeof(float));
     }
-    
+
     return file.good();
 }
 
-bool load_vectors_binary(
-    const std::string& path,
-    std::vector<std::vector<float>>& vectors
-) {
+bool load_vectors_binary(const std::string& path, std::vector<std::vector<float>>& vectors) {
     std::ifstream file(path, std::ios::binary);
-    if (!file) return false;
-    
+    if (!file)
+        return false;
+
     int n, dim;
     file.read(reinterpret_cast<char*>(&n), sizeof(n));
     file.read(reinterpret_cast<char*>(&dim), sizeof(dim));
-    
+
     vectors.resize(n);
     for (int i = 0; i < n; ++i) {
         vectors[i].resize(dim);
         file.read(reinterpret_cast<char*>(vectors[i].data()), dim * sizeof(float));
     }
-    
+
     return file.good();
 }
 
-} // namespace vectorvault::bench
+}  // namespace vectorvault::bench

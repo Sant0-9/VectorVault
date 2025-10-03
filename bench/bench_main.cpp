@@ -1,17 +1,19 @@
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <fstream>
+#include <iostream>
+#include <numeric>
+#include <thread>
+
 #include "vectorvault/hnsw.hpp"
 #include "vectorvault/version.hpp"
-#include <iostream>
-#include <fstream>
-#include <chrono>
-#include <algorithm>
-#include <numeric>
-#include <cmath>
-#include <thread>
 
 namespace vectorvault::bench {
 
 // Forward declarations
-void generate_random_vectors(std::vector<std::vector<float>>& vectors, int n, int dim, uint64_t seed);
+void generate_random_vectors(std::vector<std::vector<float>>& vectors, int n, int dim,
+                             uint64_t seed);
 void normalize_vectors(std::vector<std::vector<float>>& vectors);
 bool save_vectors_binary(const std::string& path, const std::vector<std::vector<float>>& vectors);
 bool load_vectors_binary(const std::string& path, std::vector<std::vector<float>>& vectors);
@@ -19,31 +21,26 @@ bool load_vectors_binary(const std::string& path, std::vector<std::vector<float>
 struct BruteForceResult {
     int id;
     float distance;
-    bool operator<(const BruteForceResult& other) const {
-        return distance < other.distance;
-    }
+    bool operator<(const BruteForceResult& other) const { return distance < other.distance; }
 };
 
-std::vector<BruteForceResult> brute_force_search(
-    const std::vector<float>& query,
-    const std::vector<std::vector<float>>& database,
-    int k,
-    DistanceMetric metric
-);
+std::vector<BruteForceResult> brute_force_search(const std::vector<float>& query,
+                                                 const std::vector<std::vector<float>>& database,
+                                                 int k, DistanceMetric metric);
 
 float compute_recall(const std::vector<int>& ground_truth, const std::vector<int>& results, int k);
 
-} // namespace vectorvault::bench
+}  // namespace vectorvault::bench
 
 using namespace vectorvault;
 using namespace vectorvault::bench;
 
 struct BenchmarkConfig {
     std::string mode = "all";
-    int N = 100000;        // Number of vectors
-    int d = 768;           // Dimension
-    int Q = 1000;          // Number of queries
-    int k = 10;            // Number of nearest neighbors
+    int N = 100000;  // Number of vectors
+    int d = 768;     // Dimension
+    int Q = 1000;    // Number of queries
+    int k = 10;      // Number of nearest neighbors
     int M = 16;
     int ef_construction = 200;
     std::vector<int> ef_search_values = {10, 20, 50, 100, 200};
@@ -60,61 +57,63 @@ void print_system_info() {
     std::cout << std::endl;
 }
 
-std::vector<double> compute_percentiles(std::vector<double> values, const std::vector<double>& percentiles) {
+std::vector<double> compute_percentiles(std::vector<double> values,
+                                        const std::vector<double>& percentiles) {
     std::sort(values.begin(), values.end());
     std::vector<double> results;
-    
+
     for (double p : percentiles) {
         size_t idx = static_cast<size_t>(p * values.size());
-        if (idx >= values.size()) idx = values.size() - 1;
+        if (idx >= values.size())
+            idx = values.size() - 1;
         results.push_back(values[idx]);
     }
-    
+
     return results;
 }
 
 void run_build_benchmark(const BenchmarkConfig& config) {
     std::cout << "\n=== Build Benchmark ===" << std::endl;
-    std::cout << "N=" << config.N << ", d=" << config.d << ", M=" << config.M 
+    std::cout << "N=" << config.N << ", d=" << config.d << ", M=" << config.M
               << ", efC=" << config.ef_construction << std::endl;
-    
+
     // Generate or load data
     std::vector<std::vector<float>> vectors;
-    std::string data_file = config.data_path + "vectors_" + std::to_string(config.N) + 
-                           "_" + std::to_string(config.d) + ".bin";
-    
+    std::string data_file = config.data_path + "vectors_" + std::to_string(config.N) + "_" +
+                            std::to_string(config.d) + ".bin";
+
     std::cout << "Generating " << config.N << " random vectors..." << std::endl;
     generate_random_vectors(vectors, config.N, config.d, 42);
-    
+
     // Build index
     HNSWParams params;
     params.M = config.M;
     params.ef_construction = config.ef_construction;
     params.metric = DistanceMetric::L2;
-    
+
     HNSWIndex index(config.d, params);
     index.reserve(config.N);
-    
+
     auto start = std::chrono::high_resolution_clock::now();
-    
+
     for (size_t i = 0; i < vectors.size(); ++i) {
         index.add(static_cast<int>(i), vectors[i]);
-        
+
         if ((i + 1) % 10000 == 0) {
             std::cout << "  Inserted " << (i + 1) << " vectors..." << std::endl;
         }
     }
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    
+
     double build_time_s = duration.count() / 1000.0;
     double throughput = config.N / build_time_s;
-    
+
     std::cout << "Build time: " << build_time_s << " seconds" << std::endl;
     std::cout << "Throughput: " << static_cast<int>(throughput) << " vectors/sec" << std::endl;
     std::cout << "Max level: " << index.max_level() << std::endl;
-    
+
     // Save index
     std::string index_path = config.data_path + "index.vv";
     std::cout << "Saving index to " << index_path << "..." << std::endl;
@@ -125,24 +124,24 @@ void run_build_benchmark(const BenchmarkConfig& config) {
 
 void run_query_benchmark(const BenchmarkConfig& config) {
     std::cout << "\n=== Query Benchmark ===" << std::endl;
-    
+
     // Load or generate data
     std::vector<std::vector<float>> vectors;
     std::cout << "Generating database vectors..." << std::endl;
     generate_random_vectors(vectors, config.N, config.d, 42);
-    
+
     std::cout << "Generating query vectors..." << std::endl;
     std::vector<std::vector<float>> queries;
     generate_random_vectors(queries, config.Q, config.d, 1337);
-    
+
     // Build index
     HNSWParams params;
     params.M = config.M;
     params.ef_construction = config.ef_construction;
     params.metric = DistanceMetric::L2;
-    
+
     HNSWIndex index(config.d, params);
-    
+
     std::cout << "Building index..." << std::endl;
     for (size_t i = 0; i < vectors.size(); ++i) {
         index.add(static_cast<int>(i), vectors[i]);
@@ -150,7 +149,7 @@ void run_query_benchmark(const BenchmarkConfig& config) {
             std::cout << "  Inserted " << (i + 1) << " vectors..." << std::endl;
         }
     }
-    
+
     // Compute ground truth for recall calculation (sample)
     std::cout << "Computing ground truth (first 100 queries)..." << std::endl;
     std::vector<std::vector<int>> ground_truth(std::min(100, config.Q));
@@ -160,25 +159,25 @@ void run_query_benchmark(const BenchmarkConfig& config) {
             ground_truth[i].push_back(r.id);
         }
     }
-    
+
     // Run benchmarks for different ef values
     std::cout << "\nRunning query benchmarks..." << std::endl;
     std::cout << "ef_search,p50_ms,p95_ms,p99_ms,qps,recall@" << config.k << std::endl;
-    
+
     for (int ef : config.ef_search_values) {
         std::vector<double> latencies;
         latencies.reserve(config.Q);
-        
+
         std::vector<float> recalls;
-        
+
         for (int i = 0; i < config.Q; ++i) {
             auto start = std::chrono::high_resolution_clock::now();
             auto results = index.search(queries[i], config.k, ef);
             auto end = std::chrono::high_resolution_clock::now();
-            
+
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            latencies.push_back(duration.count() / 1000.0); // Convert to ms
-            
+            latencies.push_back(duration.count() / 1000.0);  // Convert to ms
+
             // Compute recall for first 100 queries
             if (i < std::min(100, config.Q)) {
                 std::vector<int> result_ids;
@@ -189,27 +188,24 @@ void run_query_benchmark(const BenchmarkConfig& config) {
                 recalls.push_back(recall);
             }
         }
-        
+
         auto percentiles = compute_percentiles(latencies, {0.5, 0.95, 0.99});
-        float avg_recall = recalls.empty() ? 0.0f : 
-            std::accumulate(recalls.begin(), recalls.end(), 0.0f) / recalls.size();
-        
-        double avg_latency_s = std::accumulate(latencies.begin(), latencies.end(), 0.0) / 
-                               (latencies.size() * 1000.0);
+        float avg_recall = recalls.empty() ? 0.0f
+                                           : std::accumulate(recalls.begin(), recalls.end(), 0.0f) /
+                                                 recalls.size();
+
+        double avg_latency_s =
+            std::accumulate(latencies.begin(), latencies.end(), 0.0) / (latencies.size() * 1000.0);
         double qps = 1.0 / avg_latency_s;
-        
-        std::cout << ef << ","
-                  << percentiles[0] << ","
-                  << percentiles[1] << ","
-                  << percentiles[2] << ","
-                  << static_cast<int>(qps) << ","
-                  << avg_recall << std::endl;
+
+        std::cout << ef << "," << percentiles[0] << "," << percentiles[1] << "," << percentiles[2]
+                  << "," << static_cast<int>(qps) << "," << avg_recall << std::endl;
     }
 }
 
 int main(int argc, char* argv[]) {
     BenchmarkConfig config;
-    
+
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -242,16 +238,16 @@ int main(int argc, char* argv[]) {
             return 0;
         }
     }
-    
+
     print_system_info();
-    
+
     if (config.mode == "build" || config.mode == "all") {
         run_build_benchmark(config);
     }
-    
+
     if (config.mode == "query" || config.mode == "all") {
         run_query_benchmark(config);
     }
-    
+
     return 0;
 }
