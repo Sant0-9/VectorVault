@@ -121,7 +121,7 @@ TEST_F(PersistenceTest, DeterministicTopKResults) {
     // Create fixed query set
     std::mt19937 query_rng(9999);
     std::normal_distribution<float> query_dist(0.0f, 1.0f);
-    
+
     std::vector<std::vector<float>> queries(5);
     for (auto& q : queries) {
         q.resize(dim);
@@ -143,7 +143,7 @@ TEST_F(PersistenceTest, DeterministicTopKResults) {
 
     // Save and load
     ASSERT_TRUE(index.save(test_index_path));
-    
+
     HNSWIndex loaded_index(dim, params);
     ASSERT_TRUE(loaded_index.load(test_index_path));
 
@@ -160,11 +160,11 @@ TEST_F(PersistenceTest, DeterministicTopKResults) {
 
     // Verify identical results
     ASSERT_EQ(results_before.size(), results_after.size());
-    
+
     for (size_t q = 0; q < queries.size(); ++q) {
-        ASSERT_EQ(results_before[q].size(), results_after[q].size()) 
+        ASSERT_EQ(results_before[q].size(), results_after[q].size())
             << "Query " << q << " returned different number of results";
-        
+
         for (size_t i = 0; i < results_before[q].size(); ++i) {
             EXPECT_EQ(results_before[q][i].first, results_after[q][i].first)
                 << "Query " << q << ", position " << i << ": ID mismatch";

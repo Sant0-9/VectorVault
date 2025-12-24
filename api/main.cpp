@@ -221,17 +221,15 @@ void VectorVaultServer::handle_stats(const httplib::Request&, httplib::Response&
         // Determine compiler and version
         std::string compiler;
         std::string compiler_version;
-        
+
 #if defined(__clang__)
         compiler = "Clang";
-        compiler_version = std::to_string(__clang_major__) + "." + 
-                          std::to_string(__clang_minor__) + "." + 
-                          std::to_string(__clang_patchlevel__);
+        compiler_version = std::to_string(__clang_major__) + "." + std::to_string(__clang_minor__) +
+                           "." + std::to_string(__clang_patchlevel__);
 #elif defined(__GNUC__)
         compiler = "GCC";
-        compiler_version = std::to_string(__GNUC__) + "." + 
-                          std::to_string(__GNUC_MINOR__) + "." + 
-                          std::to_string(__GNUC_PATCHLEVEL__);
+        compiler_version = std::to_string(__GNUC__) + "." + std::to_string(__GNUC_MINOR__) + "." +
+                           std::to_string(__GNUC_PATCHLEVEL__);
 #elif defined(_MSC_VER)
         compiler = "MSVC";
         compiler_version = std::to_string(_MSC_VER);
@@ -243,7 +241,7 @@ void VectorVaultServer::handle_stats(const httplib::Request&, httplib::Response&
         // Build flags
         std::string build_type;
         std::vector<std::string> flags;
-        
+
 #ifdef NDEBUG
         build_type = "Release";
 #else
@@ -260,23 +258,22 @@ void VectorVaultServer::handle_stats(const httplib::Request&, httplib::Response&
         }
 #endif
 
-        json response = {
-            {"dim", index_.dimension()},
-            {"size", index_.size()},
-            {"levels", index_.max_level()},
-            {"params",
-             {{"M", params.M},
-              {"efConstruction", params.ef_construction},
-              {"efDefault", 50},
-              {"maxM", params.max_M},
-              {"maxM0", params.max_M0},
-              {"metric", params.metric == DistanceMetric::L2 ? "L2" : "COSINE"}}},
-            {"build",
-             {{"compiler", compiler},
-              {"compiler_version", compiler_version},
-              {"build_type", build_type},
-              {"flags", flags}}},
-            {"version", std::string(VERSION)}};
+        json response = {{"dim", index_.dimension()},
+                         {"size", index_.size()},
+                         {"levels", index_.max_level()},
+                         {"params",
+                          {{"M", params.M},
+                           {"efConstruction", params.ef_construction},
+                           {"efDefault", 50},
+                           {"maxM", params.max_M},
+                           {"maxM0", params.max_M0},
+                           {"metric", params.metric == DistanceMetric::L2 ? "L2" : "COSINE"}}},
+                         {"build",
+                          {{"compiler", compiler},
+                           {"compiler_version", compiler_version},
+                           {"build_type", build_type},
+                           {"flags", flags}}},
+                         {"version", std::string(VERSION)}};
 
         res.set_content(response.dump(2), "application/json");
 

@@ -139,11 +139,11 @@ TEST_F(HNSWSmallTest, SelfQueryAccuracy) {
     // Test multiple self-queries
     int found_count = 0;
     std::vector<int> test_ids = {0, 10, 42, 100, 150};
-    
+
     for (int test_id : test_ids) {
         auto results = index.search(vectors[static_cast<size_t>(test_id)], 10, 200);
         ASSERT_GE(results.size(), 1u);
-        
+
         // Check if test_id is in top 10 results
         for (const auto& r : results) {
             if (r.id == test_id && r.distance < 1e-3f) {
@@ -152,9 +152,10 @@ TEST_F(HNSWSmallTest, SelfQueryAccuracy) {
             }
         }
     }
-    
+
     // HNSW should find most self-queries in top-k (at least 80%)
-    EXPECT_GE(found_count, 4) << "Found " << found_count << " out of " << test_ids.size() << " self-queries";
+    EXPECT_GE(found_count, 4) << "Found " << found_count << " out of " << test_ids.size()
+                              << " self-queries";
 }
 
 TEST_F(HNSWSmallTest, DuplicateIDThrows) {
