@@ -63,7 +63,7 @@ std::vector<double> compute_percentiles(std::vector<double> values,
     std::vector<double> results;
 
     for (double p : percentiles) {
-        size_t idx = static_cast<size_t>(p * values.size());
+        size_t idx = static_cast<size_t>(p * static_cast<double>(values.size()));
         if (idx >= values.size())
             idx = values.size() - 1;
         results.push_back(values[idx]);
@@ -92,7 +92,7 @@ void run_build_benchmark(const BenchmarkConfig& config) {
     params.metric = DistanceMetric::L2;
 
     HNSWIndex index(config.d, params);
-    index.reserve(config.N);
+    index.reserve(static_cast<size_t>(config.N));
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -107,7 +107,7 @@ void run_build_benchmark(const BenchmarkConfig& config) {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    double build_time_s = duration.count() / 1000.0;
+    double build_time_s = static_cast<double>(duration.count()) / 1000.0;
     double throughput = config.N / build_time_s;
 
     std::cout << "Build time: " << build_time_s << " seconds" << std::endl;
@@ -152,11 +152,12 @@ void run_query_benchmark(const BenchmarkConfig& config) {
 
     // Compute ground truth for recall calculation (sample)
     std::cout << "Computing ground truth (first 100 queries)..." << std::endl;
-    std::vector<std::vector<int>> ground_truth(std::min(100, config.Q));
+    std::vector<std::vector<int>> ground_truth(static_cast<size_t>(std::min(100, config.Q)));
     for (int i = 0; i < std::min(100, config.Q); ++i) {
-        auto results = brute_force_search(queries[i], vectors, config.k, params.metric);
+        auto results =
+            brute_force_search(queries[static_cast<size_t>(i)], vectors, config.k, params.metric);
         for (const auto& r : results) {
-            ground_truth[i].push_back(r.id);
+            ground_truth[static_cast<size_t>(i)].push_back(r.id);
         }
     }
 
@@ -166,17 +167,17 @@ void run_query_benchmark(const BenchmarkConfig& config) {
 
     for (int ef : config.ef_search_values) {
         std::vector<double> latencies;
-        latencies.reserve(config.Q);
+        latencies.reserve(static_cast<size_t>(config.Q));
 
         std::vector<float> recalls;
 
         for (int i = 0; i < config.Q; ++i) {
             auto start = std::chrono::high_resolution_clock::now();
-            auto results = index.search(queries[i], config.k, ef);
+            auto results = index.search(queries[static_cast<size_t>(i)], config.k, ef);
             auto end = std::chrono::high_resolution_clock::now();
 
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            latencies.push_back(duration.count() / 1000.0);  // Convert to ms
+            latencies.push_back(static_cast<double>(duration.count()) / 1000.0);  // Convert to ms
 
             // Compute recall for first 100 queries
             if (i < std::min(100, config.Q)) {
@@ -184,7 +185,8 @@ void run_query_benchmark(const BenchmarkConfig& config) {
                 for (const auto& r : results) {
                     result_ids.push_back(r.id);
                 }
-                float recall = compute_recall(ground_truth[i], result_ids, config.k);
+                float recall =
+                    compute_recall(ground_truth[static_cast<size_t>(i)], result_ids, config.k);
                 recalls.push_back(recall);
             }
         }
@@ -192,10 +194,10 @@ void run_query_benchmark(const BenchmarkConfig& config) {
         auto percentiles = compute_percentiles(latencies, {0.5, 0.95, 0.99});
         float avg_recall = recalls.empty() ? 0.0f
                                            : std::accumulate(recalls.begin(), recalls.end(), 0.0f) /
-                                                 recalls.size();
+                                                 static_cast<float>(recalls.size());
 
-        double avg_latency_s =
-            std::accumulate(latencies.begin(), latencies.end(), 0.0) / (latencies.size() * 1000.0);
+        double avg_latency_s = std::accumulate(latencies.begin(), latencies.end(), 0.0) /
+                               (static_cast<double>(latencies.size()) * 1000.0);
         double qps = 1.0 / avg_latency_s;
 
         std::cout << ef << "," << percentiles[0] << "," << percentiles[1] << "," << percentiles[2]

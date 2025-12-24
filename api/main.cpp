@@ -128,7 +128,7 @@ void VectorVaultServer::handle_query(const httplib::Request& req, httplib::Respo
         }
 
         response["latency_us"] = duration.count();
-        response["latency_ms"] = duration.count() / 1000.0;
+        response["latency_ms"] = static_cast<double>(duration.count()) / 1000.0;
 
         res.set_content(response.dump(), "application/json");
 

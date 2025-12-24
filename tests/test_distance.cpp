@@ -15,8 +15,8 @@ class DistanceTest : public ::testing::Test {
 
         // Generate random test vectors
         for (int d : test_dims) {
-            std::vector<float> a(d), b(d);
-            for (int i = 0; i < d; ++i) {
+            std::vector<float> a(static_cast<size_t>(d)), b(static_cast<size_t>(d));
+            for (size_t i = 0; i < static_cast<size_t>(d); ++i) {
                 a[i] = dist(rng);
                 b[i] = dist(rng);
             }

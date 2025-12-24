@@ -10,10 +10,10 @@ void generate_random_vectors(std::vector<std::vector<float>>& vectors, int n, in
     std::mt19937 rng(seed);
     std::normal_distribution<float> dist(0.0f, 1.0f);
 
-    vectors.resize(n);
-    for (int i = 0; i < n; ++i) {
-        vectors[i].resize(dim);
-        for (int j = 0; j < dim; ++j) {
+    vectors.resize(static_cast<size_t>(n));
+    for (size_t i = 0; i < static_cast<size_t>(n); ++i) {
+        vectors[i].resize(static_cast<size_t>(dim));
+        for (size_t j = 0; j < static_cast<size_t>(dim); ++j) {
             vectors[i][j] = dist(rng);
         }
     }
@@ -49,7 +49,8 @@ bool save_vectors_binary(const std::string& path, const std::vector<std::vector<
     file.write(reinterpret_cast<const char*>(&dim), sizeof(dim));
 
     for (const auto& vec : vectors) {
-        file.write(reinterpret_cast<const char*>(vec.data()), dim * sizeof(float));
+        file.write(reinterpret_cast<const char*>(vec.data()),
+                   static_cast<std::streamsize>(dim) * static_cast<std::streamsize>(sizeof(float)));
     }
 
     return file.good();
@@ -64,10 +65,11 @@ bool load_vectors_binary(const std::string& path, std::vector<std::vector<float>
     file.read(reinterpret_cast<char*>(&n), sizeof(n));
     file.read(reinterpret_cast<char*>(&dim), sizeof(dim));
 
-    vectors.resize(n);
-    for (int i = 0; i < n; ++i) {
-        vectors[i].resize(dim);
-        file.read(reinterpret_cast<char*>(vectors[i].data()), dim * sizeof(float));
+    vectors.resize(static_cast<size_t>(n));
+    for (size_t i = 0; i < static_cast<size_t>(n); ++i) {
+        vectors[i].resize(static_cast<size_t>(dim));
+        file.read(reinterpret_cast<char*>(vectors[i].data()),
+                  static_cast<std::streamsize>(dim) * static_cast<std::streamsize>(sizeof(float)));
     }
 
     return file.good();
