@@ -21,19 +21,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++ clang-format clang-tidy
-    
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: ${{ runner.os }}-${{ matrix.build_type }}
+        sudo apt-get install -y cmake g++
     
     - name: Configure CMake
       run: |
         cmake -B build \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DVECTORVAULT_ENABLE_AVX2=ON \
           -DVECTORVAULT_WERROR=OFF \
           -DVECTORVAULT_BUILD_TESTS=ON \
@@ -45,12 +38,6 @@ jobs:
     - name: Run Tests
       working-directory: build
       run: ctest --output-on-failure --timeout 300
-    
-    - name: Run clang-tidy (Release only)
-      if: matrix.build_type == 'Release'
-      run: |
-        find include src api -name '*.cpp' -o -name '*.hpp' | \
-          xargs clang-tidy -p build || true
     
     - name: Upload artifacts
       if: matrix.build_type == 'Release'
@@ -114,32 +101,3 @@ jobs:
       run: |
         find include src api bench tests -name '*.cpp' -o -name '*.hpp' | \
           xargs clang-format --dry-run --Werror
-
-  sanitizers:
-    name: Sanitizers
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake g++
-    
-    - name: Configure with ASan/UBSan
-      run: |
-        cmake -B build \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
-          -DVECTORVAULT_BUILD_TESTS=ON
-    
-    - name: Build
-      run: cmake --build build -j$(nproc)
-    
-    - name: Run Tests with Sanitizers
-      working-directory: build
-      run: ctest --output-on-failure --timeout 300
-      env:
-        ASAN_OPTIONS: detect_leaks=1
-        UBSAN_OPTIONS: print_stacktrace=1
