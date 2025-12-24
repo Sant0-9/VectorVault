@@ -88,7 +88,7 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
         node->id = id;
         node->level = node_level;
         node->vector = node_vec;
-        node->neighbors.resize(node_level + 1);
+        node->neighbors.resize(static_cast<size_t>(node_level + 1));
 
         entry_point_ = id;
         max_level_ = node_level;
@@ -98,7 +98,7 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
     }
 
     // Build neighbor lists for new node
-    std::vector<std::vector<int>> new_node_neighbors(node_level + 1);
+    std::vector<std::vector<int>> new_node_neighbors(static_cast<size_t>(node_level + 1));
 
     // Search for nearest neighbors at each layer
     std::vector<int> entry_points = {entry_point_};
@@ -120,7 +120,7 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
         int M = (lc == 0) ? params_.max_M0 : params_.max_M;
         auto neighbors = select_neighbors_heuristic(node_vec, candidates, M);
 
-        new_node_neighbors[lc] = neighbors;
+        new_node_neighbors[static_cast<size_t>(lc)] = neighbors;
 
         // Update entry point for next layer
         if (!candidates.empty()) {
@@ -141,7 +141,7 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
 
     // Add bidirectional links
     for (int lc = node_level; lc >= 0; --lc) {
-        for (int neighbor_id : new_node_neighbors[lc]) {
+        for (int neighbor_id : new_node_neighbors[static_cast<size_t>(lc)]) {
             auto neighbor_it = id_to_index_.find(neighbor_id);
             if (neighbor_it == id_to_index_.end())
                 continue;
@@ -152,14 +152,15 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
             if (lc >= static_cast<int>(nodes_[neighbor_idx]->neighbors.size()))
                 continue;
 
-            nodes_[neighbor_idx]->neighbors[lc].push_back(id);
+            nodes_[neighbor_idx]->neighbors[static_cast<size_t>(lc)].push_back(id);
 
             // Prune if necessary
             int max_conn = (lc == 0) ? params_.max_M0 : params_.max_M;
-            if (static_cast<int>(nodes_[neighbor_idx]->neighbors[lc].size()) > max_conn) {
+            if (static_cast<int>(nodes_[neighbor_idx]->neighbors[static_cast<size_t>(lc)].size()) >
+                max_conn) {
                 auto& neighbor_vec = nodes_[neighbor_idx]->vector;
                 std::vector<SearchResult> neighbor_candidates;
-                for (int conn_id : nodes_[neighbor_idx]->neighbors[lc]) {
+                for (int conn_id : nodes_[neighbor_idx]->neighbors[static_cast<size_t>(lc)]) {
                     auto conn_it = id_to_index_.find(conn_id);
                     if (conn_it == id_to_index_.end())
                         continue;
@@ -170,7 +171,7 @@ void HNSWIndex::add(int id, std::span<const float> vec) {
 
                 auto pruned =
                     select_neighbors_heuristic(neighbor_vec, neighbor_candidates, max_conn);
-                nodes_[neighbor_idx]->neighbors[lc] = pruned;
+                nodes_[neighbor_idx]->neighbors[static_cast<size_t>(lc)] = pruned;
             }
         }
     }
@@ -219,7 +220,7 @@ std::vector<HNSWIndex::SearchResult> HNSWIndex::search_layer(std::span<const flo
             continue;
         }
 
-        for (int neighbor_id : nodes_[current_idx]->neighbors[layer]) {
+        for (int neighbor_id : nodes_[current_idx]->neighbors[static_cast<size_t>(layer)]) {
             if (visited.find(neighbor_id) != visited.end()) {
                 continue;
             }
@@ -254,9 +255,9 @@ std::vector<HNSWIndex::SearchResult> HNSWIndex::search_layer(std::span<const flo
     return result_vec;
 }
 
-std::vector<int> HNSWIndex::select_neighbors_heuristic(std::span<const float> base_vec,
-                                                       const std::vector<SearchResult>& candidates,
-                                                       int M) const {
+std::vector<int> HNSWIndex::select_neighbors_heuristic(
+    [[maybe_unused]] std::span<const float> base_vec, const std::vector<SearchResult>& candidates,
+    int M) const {
     if (static_cast<int>(candidates.size()) <= M) {
         std::vector<int> result;
         result.reserve(candidates.size());
@@ -271,8 +272,8 @@ std::vector<int> HNSWIndex::select_neighbors_heuristic(std::span<const float> ba
     std::sort(sorted.begin(), sorted.end());
 
     std::vector<int> result;
-    result.reserve(M);
-    for (int i = 0; i < M && i < static_cast<int>(sorted.size()); ++i) {
+    result.reserve(static_cast<size_t>(M));
+    for (size_t i = 0; i < static_cast<size_t>(M) && i < sorted.size(); ++i) {
         result.push_back(sorted[i].id);
     }
 
@@ -308,7 +309,7 @@ std::vector<HNSWIndex::SearchResult> HNSWIndex::search(std::span<const float> qu
 
     // Return top k
     if (static_cast<int>(results.size()) > k) {
-        results.resize(k);
+        results.resize(static_cast<size_t>(k));
     }
 
     return results;
