@@ -68,6 +68,10 @@ void VectorVaultServer::handle_add(const httplib::Request& req, httplib::Respons
         json response = {{"status", "ok"}, {"id", id}};
         res.set_content(response.dump(), "application/json");
 
+    } catch (const std::invalid_argument& e) {
+        res.status = 400;
+        json error = {{"error", e.what()}};
+        res.set_content(error.dump(), "application/json");
     } catch (const json::exception& e) {
         res.status = 400;
         json error = {{"error", e.what()}};
@@ -106,10 +110,29 @@ void VectorVaultServer::handle_query(const httplib::Request& req, httplib::Respo
         int ef = 50;
 
         if (req.has_param("k")) {
-            k = std::stoi(req.get_param_value("k"));
+            try {
+                k = std::stoi(req.get_param_value("k"));
+            } catch (const std::exception&) {
+                res.status = 400;
+                res.set_content("{\"error\":\"Invalid 'k' parameter\"}", "application/json");
+                return;
+            }
         }
         if (req.has_param("ef")) {
-            ef = std::stoi(req.get_param_value("ef"));
+            try {
+                ef = std::stoi(req.get_param_value("ef"));
+            } catch (const std::exception&) {
+                res.status = 400;
+                res.set_content("{\"error\":\"Invalid 'ef' parameter\"}", "application/json");
+                return;
+            }
+        }
+
+        if (k <= 0 || ef <= 0) {
+            res.status = 400;
+            json error_response = {{"error", "'k' and 'ef' must be positive"}, {"k", k}, {"ef", ef}};
+            res.set_content(error_response.dump(), "application/json");
+            return;
         }
 
         // Search
@@ -132,6 +155,10 @@ void VectorVaultServer::handle_query(const httplib::Request& req, httplib::Respo
 
         res.set_content(response.dump(), "application/json");
 
+    } catch (const std::invalid_argument& e) {
+        res.status = 400;
+        json error = {{"error", e.what()}};
+        res.set_content(error.dump(), "application/json");
     } catch (const json::exception& e) {
         res.status = 400;
         json error = {{"error", e.what()}};

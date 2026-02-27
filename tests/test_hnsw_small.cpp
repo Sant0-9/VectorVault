@@ -183,6 +183,17 @@ TEST_F(HNSWSmallTest, EmptyIndexSearch) {
     EXPECT_TRUE(results.empty());
 }
 
+TEST_F(HNSWSmallTest, InvalidSearchParametersThrow) {
+    HNSWParams params;
+    HNSWIndex index(dim, params);
+    index.add(0, vectors[0]);
+
+    EXPECT_THROW(index.search(vectors[0], 0, 50), std::invalid_argument);
+    EXPECT_THROW(index.search(vectors[0], -1, 50), std::invalid_argument);
+    EXPECT_THROW(index.search(vectors[0], 1, 0), std::invalid_argument);
+    EXPECT_THROW(index.search(vectors[0], 1, -10), std::invalid_argument);
+}
+
 TEST_F(HNSWSmallTest, CosineMetric) {
     HNSWParams params;
     params.metric = DistanceMetric::COSINE;

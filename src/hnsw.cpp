@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -285,6 +286,12 @@ std::vector<HNSWIndex::SearchResult> HNSWIndex::search(std::span<const float> qu
     if (static_cast<int>(query.size()) != dim_) {
         throw std::invalid_argument("Query dimension mismatch");
     }
+    if (k <= 0) {
+        throw std::invalid_argument("k must be positive");
+    }
+    if (ef_search <= 0) {
+        throw std::invalid_argument("ef_search must be positive");
+    }
 
     std::shared_lock lock(mutex_);
 
@@ -390,51 +397,115 @@ bool HNSWIndex::load(const std::string& path) {
             return false;
         }
 
-        params_.M = reader.read_int32();
-        params_.ef_construction = reader.read_int32();
-        params_.max_M = reader.read_int32();
-        params_.max_M0 = reader.read_int32();
-        params_.metric = static_cast<DistanceMetric>(reader.read_uint32());
-        entry_point_ = reader.read_int32();
-        max_level_ = reader.read_int32();
+        HNSWParams loaded_params = params_;
+        loaded_params.M = reader.read_int32();
+        loaded_params.ef_construction = reader.read_int32();
+        loaded_params.max_M = reader.read_int32();
+        loaded_params.max_M0 = reader.read_int32();
 
-        uint64_t num_nodes = reader.read_uint64();
+        uint32_t metric_raw = reader.read_uint32();
+        if (metric_raw > static_cast<uint32_t>(DistanceMetric::COSINE)) {
+            return false;
+        }
+        loaded_params.metric = static_cast<DistanceMetric>(metric_raw);
 
-        // Clear existing data
-        nodes_.clear();
-        id_to_index_.clear();
-        nodes_.reserve(num_nodes);
+        int loaded_entry_point = reader.read_int32();
+        int loaded_max_level = reader.read_int32();
 
-        // Read nodes
-        for (uint64_t i = 0; i < num_nodes; ++i) {
+        uint64_t num_nodes_u64 = reader.read_uint64();
+        if (num_nodes_u64 > std::numeric_limits<size_t>::max()) {
+            return false;
+        }
+        size_t num_nodes = num_nodes_u64;
+
+        std::vector<std::unique_ptr<Node>> loaded_nodes;
+        loaded_nodes.reserve(num_nodes);
+        std::unordered_map<int, size_t> loaded_id_to_index;
+        loaded_id_to_index.reserve(num_nodes);
+
+        // Read nodes into temporary storage so load is atomic on success.
+        for (size_t i = 0; i < num_nodes; ++i) {
             auto node = std::make_unique<Node>();
             node->id = reader.read_int32();
             node->level = reader.read_int32();
-
-            uint64_t vec_size = reader.read_uint64();
-            node->vector.resize(vec_size);
-            reader.read_bytes(node->vector.data(), vec_size * sizeof(float));
-
-            uint64_t num_layers = reader.read_uint64();
-            node->neighbors.resize(num_layers);
-            for (uint64_t j = 0; j < num_layers; ++j) {
-                uint64_t num_neighbors = reader.read_uint64();
-                node->neighbors[j].resize(num_neighbors);
-                reader.read_bytes(node->neighbors[j].data(), num_neighbors * sizeof(int));
+            if (node->level < 0) {
+                return false;
             }
 
-            id_to_index_[node->id] = i;
-            nodes_.push_back(std::move(node));
+            uint64_t vec_size = reader.read_uint64();
+            if (vec_size != static_cast<uint64_t>(dim_)) {
+                return false;
+            }
+            node->vector.resize(vec_size);
+            reader.read_bytes(node->vector.data(), node->vector.size() * sizeof(float));
+
+            uint64_t num_layers = reader.read_uint64();
+            if (num_layers != static_cast<uint64_t>(node->level + 1)) {
+                return false;
+            }
+            if (num_layers > std::numeric_limits<size_t>::max()) {
+                return false;
+            }
+            node->neighbors.resize(num_layers);
+            for (size_t j = 0; j < node->neighbors.size(); ++j) {
+                uint64_t num_neighbors = reader.read_uint64();
+                if (num_neighbors > std::numeric_limits<size_t>::max()) {
+                    return false;
+                }
+                node->neighbors[j].resize(num_neighbors);
+                reader.read_bytes(node->neighbors[j].data(),
+                                  node->neighbors[j].size() * sizeof(int));
+            }
+
+            auto insert_result = loaded_id_to_index.emplace(node->id, i);
+            if (!insert_result.second) {
+                return false;
+            }
+            loaded_nodes.push_back(std::move(node));
         }
 
         // Verify CRC (last 4 bytes)
         size_t data_size = reader.position();
+        if (reader.remaining() != sizeof(uint32_t)) {
+            return false;
+        }
         uint32_t stored_crc = reader.read_uint32();
         uint32_t computed_crc = compute_crc32(file.data(), data_size);
 
         if (stored_crc != computed_crc) {
             return false;
         }
+
+        if (loaded_nodes.empty()) {
+            if (loaded_entry_point != -1 || loaded_max_level != -1) {
+                return false;
+            }
+        } else {
+            if (loaded_id_to_index.find(loaded_entry_point) == loaded_id_to_index.end()) {
+                return false;
+            }
+            if (loaded_max_level < 0) {
+                return false;
+            }
+        }
+
+        // Validate neighbor references.
+        for (const auto& node : loaded_nodes) {
+            for (const auto& layer_neighbors : node->neighbors) {
+                for (int neighbor_id : layer_neighbors) {
+                    if (loaded_id_to_index.find(neighbor_id) == loaded_id_to_index.end()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        nodes_ = std::move(loaded_nodes);
+        id_to_index_ = std::move(loaded_id_to_index);
+        params_ = loaded_params;
+        entry_point_ = loaded_entry_point;
+        max_level_ = loaded_max_level;
+        dist_calc_ = DistanceCalculator(params_.metric);
 
         return true;
     } catch (const std::exception&) {

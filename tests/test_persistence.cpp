@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <random>
 
 #include "vectorvault/hnsw.hpp"
@@ -17,10 +18,10 @@ class PersistenceTest : public ::testing::Test {
         N = 100;
         dim = 64;
 
-        vectors.resize(N);
-        for (int i = 0; i < N; ++i) {
-            vectors[i].resize(dim);
-            for (int j = 0; j < dim; ++j) {
+        vectors.resize(static_cast<size_t>(N));
+        for (size_t i = 0; i < static_cast<size_t>(N); ++i) {
+            vectors[i].resize(static_cast<size_t>(dim));
+            for (size_t j = 0; j < static_cast<size_t>(dim); ++j) {
                 vectors[i][j] = dist(rng);
             }
         }
@@ -49,7 +50,7 @@ TEST_F(PersistenceTest, SaveAndLoad) {
     // Build and save index
     HNSWIndex index1(dim, params);
     for (int i = 0; i < N; ++i) {
-        index1.add(i, vectors[i]);
+        index1.add(i, vectors[static_cast<size_t>(i)]);
     }
 
     ASSERT_TRUE(index1.save(test_index_path));
@@ -73,7 +74,7 @@ TEST_F(PersistenceTest, IdenticalSearchResults) {
     // Build original index
     HNSWIndex index1(dim, params);
     for (int i = 0; i < N; ++i) {
-        index1.add(i, vectors[i]);
+        index1.add(i, vectors[static_cast<size_t>(i)]);
     }
 
     // Save and load
@@ -87,9 +88,9 @@ TEST_F(PersistenceTest, IdenticalSearchResults) {
     std::normal_distribution<float> dist(0.0f, 1.0f);
 
     for (int q = 0; q < 10; ++q) {
-        std::vector<float> query(dim);
+        std::vector<float> query(static_cast<size_t>(dim));
         for (int i = 0; i < dim; ++i) {
-            query[i] = dist(rng);
+            query[static_cast<size_t>(i)] = dist(rng);
         }
 
         auto results1 = index1.search(query, 10, 50);
@@ -115,7 +116,7 @@ TEST_F(PersistenceTest, DeterministicTopKResults) {
     // Build index with fixed data
     HNSWIndex index(dim, params);
     for (int i = 0; i < N; ++i) {
-        index.add(i, vectors[i]);
+        index.add(i, vectors[static_cast<size_t>(i)]);
     }
 
     // Create fixed query set
@@ -124,9 +125,9 @@ TEST_F(PersistenceTest, DeterministicTopKResults) {
 
     std::vector<std::vector<float>> queries(5);
     for (auto& q : queries) {
-        q.resize(dim);
+        q.resize(static_cast<size_t>(dim));
         for (int j = 0; j < dim; ++j) {
-            q[j] = query_dist(query_rng);
+            q[static_cast<size_t>(j)] = query_dist(query_rng);
         }
     }
 
@@ -211,7 +212,7 @@ TEST_F(PersistenceTest, MultipleCosineSaveLoad) {
 
     HNSWIndex index1(dim, params);
     for (int i = 0; i < N; ++i) {
-        index1.add(i, vectors[i]);
+        index1.add(i, vectors[static_cast<size_t>(i)]);
     }
 
     ASSERT_TRUE(index1.save(test_index_path));
@@ -225,4 +226,67 @@ TEST_F(PersistenceTest, MultipleCosineSaveLoad) {
     // Verify search works
     auto results = index2.search(vectors[0], 5, 50);
     EXPECT_GE(results.size(), 1u);
+}
+
+TEST_F(PersistenceTest, LoadPreservesExistingIndexOnFailure) {
+    HNSWParams params;
+    params.M = 8;
+    params.ef_construction = 100;
+
+    HNSWIndex baseline_index(dim, params);
+    baseline_index.add(999, vectors[0]);
+
+    auto baseline_results = baseline_index.search(vectors[0], 1, 50);
+    ASSERT_EQ(baseline_results.size(), 1u);
+    ASSERT_EQ(baseline_results[0].id, 999);
+
+    HNSWIndex source_index(dim, params);
+    source_index.add(1, vectors[1]);
+    source_index.add(2, vectors[2]);
+    ASSERT_TRUE(source_index.save(test_index_path));
+
+    std::ifstream input(test_index_path, std::ios::binary);
+    ASSERT_TRUE(input.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    input.close();
+
+    ASSERT_FALSE(bytes.empty());
+    bytes.back() ^= static_cast<char>(0xFF);
+
+    std::ofstream output(test_index_path, std::ios::binary | std::ios::trunc);
+    ASSERT_TRUE(output.is_open());
+    output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    output.close();
+
+    EXPECT_FALSE(baseline_index.load(test_index_path));
+    EXPECT_EQ(baseline_index.size(), 1u);
+
+    auto results_after_failed_load = baseline_index.search(vectors[0], 1, 50);
+    ASSERT_EQ(results_after_failed_load.size(), 1u);
+    EXPECT_EQ(results_after_failed_load[0].id, 999);
+}
+
+TEST_F(PersistenceTest, LoadRebuildsDistanceCalculatorForSavedMetric) {
+    HNSWParams cosine_params;
+    cosine_params.M = 2;
+    cosine_params.max_M = 2;
+    cosine_params.max_M0 = 4;
+    cosine_params.ef_construction = 10;
+    cosine_params.metric = DistanceMetric::COSINE;
+
+    HNSWIndex cosine_index(2, cosine_params);
+    cosine_index.add(0, std::vector<float>{100.0f, 0.0f});
+    cosine_index.add(1, std::vector<float>{1.0f, 1.0f});
+    ASSERT_TRUE(cosine_index.save(test_index_path));
+
+    HNSWParams l2_params = cosine_params;
+    l2_params.metric = DistanceMetric::L2;
+
+    HNSWIndex loaded_index(2, l2_params);
+    ASSERT_TRUE(loaded_index.load(test_index_path));
+    EXPECT_EQ(loaded_index.params().metric, DistanceMetric::COSINE);
+
+    auto results = loaded_index.search(std::vector<float>{1.0f, 0.0f}, 1, 10);
+    ASSERT_EQ(results.size(), 1u);
+    EXPECT_EQ(results[0].id, 0);
 }
